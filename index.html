@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>IEC 62443 Tri-State with Mass Select</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    /* FLEX CONTAINER: Table on the left, Charts on the right */
+    .flex-container {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+      /* no flex-wrap so table and charts remain side by side */
+    }
+    
+    /* Scrollable table wrapper */
+    #tableWrapper {
+      flex: 1;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    
+    /* Sticky charts wrapper */
+    #chartsWrapper {
+      position: sticky;
+      top: 10px;
+      width: 420px;
+      max-height: 90vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    
+    /* Table styling */
+    #combinedZonesTable {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+    #combinedZonesTable th,
+    #combinedZonesTable td {
+      border: 1px solid #ccc;
+      padding: 6px;
+      text-align: center;
+    }
+    #combinedZonesTable th {
+      background-color: #f9f9f9;
+    }
+    col.fr-col     { width: 50px; }
+    col.subreq-col { width: 80px; }
+    col.sl-col     { width: 40px; }
+    col.desc-col   { width: 200px; overflow-wrap: break-word; }
+    
+    /* Chart container styling */
+    .zone-chart-container {
+      width: 400px;
+      height: 400px;
+      border: 1px solid #ddd;
+      box-sizing: border-box;
+      background-color: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Zone header in the <th> */
+    .zone-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Group the zone info (name and target SL) on one row */
+    .zone-info {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Group the Edit/Remove buttons on one row */
+    .zone-buttons {
+      display: flex;
+      flex-direction: row;
+      gap: 10px;
+    }
+
+    /* Example styling for the buttons if desired */
+    button.edit-zone-col, button.remove-zone-col {
+      padding: 4px 8px;
+      font-size: 0.9rem;
+    }
+    /* Header inside each chart container */
+    .chart-header {
+      background-color: #f9f9f9;
+      border-bottom: 1px solid #ddd;
+      padding: 5px;
+      text-align: center;
+      font-weight: bold;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    /* Chart body wraps the canvas and forces it to fill */
+    .chart-body {
+      flex: 1 1 auto;
+      position: relative;
+    }
+    .chart-body canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100% !important;
+      height: 100% !important;
+      box-sizing: border-box;
+    }
+    
+    /* Container to hold zone entry and import sections side by side */
+    .zone-and-import-container {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+    
+    /* Styling for the zone entry section */
+    .zone-entry {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      background-color: #f0f8ff; /* light blue */
+      border-radius: 5px;
+    }
+    .zone-entry h2 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 1.2rem;
+    }
+    .zone-entry label {
+      margin-right: 8px;
+    }
+    .zone-entry input, .zone-entry select {
+      margin-right: 10px;
+      padding: 5px;
+    }
+    .zone-entry button {
+      padding: 6px 12px;
+      cursor: pointer;
+      margin-top: 5px;
+      margin-right: 5px;
+    }
+    
+    /* Styling for the import section */
+    .import-section {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ccc;
+      background-color: #f9f5e3; /* light pastel yellow */
+      border-radius: 5px;
+    }
+    .import-section h2 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 1.2rem;
+    }
+    .import-section p {
+      font-size: 0.9rem;
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+    .import-section input, .import-section button {
+      padding: 6px 10px;
+      margin-right: 5px;
+      cursor: pointer;
+    }
+    
+    /* Mass Select styling */
+    .mass-select {
+      margin-bottom: 20px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      background-color: #99f774;
+      border-radius: 5px;
+    }
+    .mass-select h2 {
+      margin: 0 0 10px;
+      font-size: 1.2rem;
+    }
+    .mass-select label {
+      margin-right: 8px;
+    }
+    .mass-select select {
+      margin-right: 10px;
+      padding: 5px;
+    }
+    .mass-select button {
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<h1>IEC 62443 Zone and Subzone Acheived and Target SL Calculation - Spider Diagrams</h1>
+
+<!-- ZONE CREATION FORM -->
+<!-- Container for Zone Entry and Import Sections -->
+<div class="zone-and-import-container">
+  <!-- Zone/Subzone Entry Section -->
+  <div class="zone-entry">
+    <h2>Add a New Zone/Subzone</h2>
+    <label for="newZoneName">Zone/Subzone Name:</label>
+    <input type="text" id="newZoneName" placeholder="Enter zone name..." />
+
+    <label for="newZoneSL">Target SL:</label>
+    <select id="newZoneSL">
+      <option value="0">SL0</option>
+      <option value="1">SL1</option>
+      <option value="2" selected>SL2</option>
+      <option value="3">SL3</option>
+      <option value="4">SL4</option>
+    </select>
+    <br>
+    <button id="addZoneBtn">Add Zone</button>
+    <button id="exportExcelBtn">Export to Excel</button>
+  </div>
+
+  <!-- Import Zones Section -->
+  <div class="import-section">
+    <h2>Import Zones from Excel</h2>
+    <p>
+      To import zones, please prepare an Excel file with the following format:
+      <br><strong>Header Row:</strong> The first two columns must be "Sub-Requirement" and "Description". Each subsequent column represents a zone with a header in the format "ZoneName (Target: SLX)". 
+      <br><strong>Data Rows:</strong> Each row should list a sub-requirement along with its description, and the corresponding status ("Yes", "No", or "N/A") for each zone.
+    </p>
+    <input type="file" id="importExcel" accept=".xlsx, .xls" />
+    <button id="importExcelBtn">Import Excel</button>
+  </div>
+</div>
+<!-- MASS SELECT FEATURE -->
+<div class="mass-select">
+  <label for="massSelectSL">Mark all SR up to SL:</label>
+  <select id="massSelectSL">
+    <option value="0">SL0</option>
+    <option value="1">SL1</option>
+    <option value="2" selected>SL2</option>
+    <option value="3">SL3</option>
+    <option value="4">SL4</option>
+  </select>
+
+  <label for="massSelectZone">Zone:</label>
+  <select id="massSelectZone">
+    <!-- We'll refresh this with "All Zones" + actual zone IDs in code -->
+  </select>
+
+  <button id="massSelectBtn">Mass Select</button>
+</div>
+
+<!-- FLEX CONTAINER: Table on the left, Charts on the right -->
+<div class="flex-container" id="mainWrapper">
+
+  <!-- Table wrapper -->
+  <div id="tableWrapper" class="scrollable-table">
+    <table id="combinedZonesTable">
+      <colgroup>
+        <col class="fr-col" />
+        <col class="subreq-col" />
+        <col class="sl-col" />
+        <col class="desc-col" />
+        <!-- Additional <th> for zones appended dynamically -->
+      </colgroup>
+      <thead>
+        <tr>
+          <th>FR</th>
+          <th>Sub-Req</th>
+          <th>SL</th>
+          <th>Description</th>
+          <!-- zone columns appear here dynamically -->
+        </tr>
+      </thead>
+      <tbody>
+        <!-- SR rows inserted here in createSubRequirementRows() -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Charts area -->
+  <div id="chartsWrapper" class="sticky-charts">
+    <!-- zone chart containers go here -->
+  </div>
+</div>
+
+
+<script>
+
+//-------------------------------------------------------------------
+// 1) DATA STRUCTURES
+//-------------------------------------------------------------------
+
+// Provide your subRequirements array (omitted for brevity):
+// e.g.
+// const subRequirements = [
+//   { frId: "FR1", subId: "SR 1.1", slLevel: 1, desc: "Human user identification..." },
+//   ...
+// ];
+
+// We'll do a small example snippet here:
+const subRequirements = [
+  // --- SL 1 ---
+  { frId: "FR1", subId: "SR 1.1",  slLevel: 1, desc: "Human user identification and authentication" },
+  { frId: "FR1", subId: "SR 1.3",  slLevel: 1, desc: "Account management" },
+  { frId: "FR1", subId: "SR 1.4",  slLevel: 1, desc: "Identifier management" },
+  { frId: "FR1", subId: "SR 1.5",  slLevel: 1, desc: "Authenticator management" },
+  { frId: "FR1", subId: "SR 1.6",  slLevel: 1, desc: "Wireless access management" },
+  { frId: "FR1", subId: "SR 1.7",  slLevel: 1, desc: "Strength of password-based authentication" },
+  { frId: "FR1", subId: "SR 1.10", slLevel: 1, desc: "Authenticator feedback" },
+  { frId: "FR1", subId: "SR 1.11", slLevel: 1, desc: "Unsuccessful login attempts" },
+  { frId: "FR1", subId: "SR 1.12", slLevel: 1, desc: "System use notification" },
+  { frId: "FR1", subId: "SR 1.13", slLevel: 1, desc: "Access via untrusted networks" },
+
+  { frId: "FR2", subId: "SR 2.1",  slLevel: 1, desc: "Authorization enforcement" },
+  { frId: "FR2", subId: "SR 2.2",  slLevel: 1, desc: "Wireless use control" },
+  { frId: "FR2", subId: "SR 2.3",  slLevel: 1, desc: "Use control for portable and mobile devices" },
+  { frId: "FR2", subId: "SR 2.4",  slLevel: 1, desc: "Mobile code" },
+  { frId: "FR2", subId: "SR 2.5",  slLevel: 1, desc: "Session lock" },
+  { frId: "FR2", subId: "SR 2.8",  slLevel: 1, desc: "Auditable events" },
+  { frId: "FR2", subId: "SR 2.9",  slLevel: 1, desc: "Audit storage capacity" },
+  { frId: "FR2", subId: "SR 2.10", slLevel: 1, desc: "Response to audit processing failures" },
+
+  { frId: "FR3", subId: "SR 3.1",  slLevel: 1, desc: "Communication integrity" },
+  { frId: "FR3", subId: "SR 3.2",  slLevel: 1, desc: "Malicious code protection" },
+  { frId: "FR3", subId: "SR 3.3",  slLevel: 1, desc: "Security functionality verification" },
+  { frId: "FR3", subId: "SR 3.5",  slLevel: 1, desc: "Input validation" },
+  { frId: "FR3", subId: "SR 3.6",  slLevel: 1, desc: "Deterministic output" },
+
+  { frId: "FR4", subId: "SR 4.1",  slLevel: 1, desc: "Information confidentiality" },
+  { frId: "FR4", subId: "SR 4.3",  slLevel: 1, desc: "Use of cryptography" },
+
+  { frId: "FR5", subId: "SR 5.1",  slLevel: 1, desc: "Network segmentation" },
+  { frId: "FR5", subId: "SR 5.2",  slLevel: 1, desc: "Zone boundary protection" },
+  { frId: "FR5", subId: "SR 5.3",  slLevel: 1, desc: "General purpose person-to-person communication restrictions" },
+  { frId: "FR5", subId: "SR 5.4",  slLevel: 1, desc: "Application partitioning" },
+
+  { frId: "FR6", subId: "SR 6.1",  slLevel: 1, desc: "Audit log accessibility" },
+
+  { frId: "FR7", subId: "SR 7.1",  slLevel: 1, desc: "Denial of service protection" },
+  { frId: "FR7", subId: "SR 7.2",  slLevel: 1, desc: "Resource management" },
+  { frId: "FR7", subId: "SR 7.3",  slLevel: 1, desc: "Control system backup" },
+  { frId: "FR7", subId: "SR 7.4",  slLevel: 1, desc: "Control system recovery and reconstitution" },
+  { frId: "FR7", subId: "SR 7.5",  slLevel: 1, desc: "Emergency power" },
+  { frId: "FR7", subId: "SR 7.6",  slLevel: 1, desc: "Network and security configuration settings" },
+  { frId: "FR7", subId: "SR 7.7",  slLevel: 1, desc: "Least functionality" },
+
+  // --- SL 2 ---
+  { frId: "FR1", subId: "SR 1.1 RE 1", slLevel: 2, desc: "Unique identification and authentication" },
+  { frId: "FR1", subId: "SR 1.2",       slLevel: 2, desc: "Software process and device identification and authentication" },
+  { frId: "FR1", subId: "SR 1.6 RE 1",  slLevel: 2, desc: "Unique identification and authentication" },
+  { frId: "FR1", subId: "SR 1.8",       slLevel: 2, desc: "Public key infrastructure certificates" },
+  { frId: "FR1", subId: "SR 1.9",       slLevel: 2, desc: "Strength of public key authentication" },
+  { frId: "FR1", subId: "SR 1.13 RE 1", slLevel: 2, desc: "Explicit access request approval" },
+
+  { frId: "FR2", subId: "SR 2.1 RE 1", slLevel: 2, desc: "Authorization enforcement for all users" },
+  { frId: "FR2", subId: "SR 2.1 RE 2", slLevel: 2, desc: "Permission mapping to roles" },
+  { frId: "FR2", subId: "SR 2.6",      slLevel: 2, desc: "Remote session termination" },
+  { frId: "FR2", subId: "SR 2.11",     slLevel: 2, desc: "Timestamps" },
+
+  { frId: "FR3", subId: "SR 3.2 RE 1", slLevel: 2, desc: "Malicious code protection on entry and exit points" },
+  { frId: "FR3", subId: "SR 3.4",      slLevel: 2, desc: "Software and information integrity" },
+  { frId: "FR3", subId: "SR 3.7",      slLevel: 2, desc: "Error handling" },
+  { frId: "FR3", subId: "SR 3.8",      slLevel: 2, desc: "Session integrity" },
+  { frId: "FR3", subId: "SR 3.9",      slLevel: 2, desc: "Protection of audit information" },
+
+  { frId: "FR4", subId: "SR 4.1 RE 1", slLevel: 2, desc: "Protection of confidentiality at rest or in transit via untrusted networks" },
+  { frId: "FR4", subId: "SR 4.2",      slLevel: 2, desc: "Information persistence" },
+
+  { frId: "FR5", subId: "SR 5.1 RE 1", slLevel: 2, desc: "Physical network segmentation" },
+  { frId: "FR5", subId: "SR 5.2 RE 1", slLevel: 2, desc: "Deny by default, allow by exception" },
+
+  { frId: "FR6", subId: "SR 6.2",      slLevel: 2, desc: "Continuous monitoring" },
+
+  { frId: "FR7", subId: "SR 7.1 RE 1", slLevel: 2, desc: "Manage communication loads" },
+  { frId: "FR7", subId: "SR 7.3 RE 1", slLevel: 2, desc: "Backup verification" },
+  { frId: "FR7", subId: "SR 7.8",      slLevel: 2, desc: "Control system component inventory" },
+
+  // --- SL 3 ---
+  { frId: "FR1", subId: "SR 1.1 RE 2", slLevel: 3, desc: "Multifactor authentication for untrusted networks" },
+  { frId: "FR1", subId: "SR 1.2 RE 1", slLevel: 3, desc: "Unique identification and authentication" },
+  { frId: "FR1", subId: "SR 1.3 RE 1", slLevel: 3, desc: "Unified account management" },
+  { frId: "FR1", subId: "SR 1.5 RE 1", slLevel: 3, desc: "Hardware security for software process identity credentials" },
+  { frId: "FR1", subId: "SR 1.7 RE 1", slLevel: 3, desc: "Password generation and lifetime restrictions for human users" },
+  { frId: "FR1", subId: "SR 1.9 RE 1", slLevel: 3, desc: "Hardware security for public key authentication" },
+
+  { frId: "FR2", subId: "SR 2.1 RE 3", slLevel: 3, desc: "Supervisor override" },
+  { frId: "FR2", subId: "SR 2.2 RE 1", slLevel: 3, desc: "Identify and report unauthorized wireless devices" },
+  { frId: "FR2", subId: "SR 2.3 RE 1", slLevel: 3, desc: "Enforcement of security status of portable and mobile devices" },
+  { frId: "FR2", subId: "SR 2.4 RE 1", slLevel: 3, desc: "Mobile code integrity check" },
+  { frId: "FR2", subId: "SR 2.7",      slLevel: 3, desc: "Concurrent session control" },
+  { frId: "FR2", subId: "SR 2.8 RE 1", slLevel: 3, desc: "Centrally managed, system-wide audit trail" },
+  { frId: "FR2", subId: "SR 2.9 RE 1", slLevel: 3, desc: "Warn when audit record storage capacity threshold reached" },
+  { frId: "FR2", subId: "SR 2.11 RE 1",slLevel: 3, desc: "Internal time synchronization" },
+  { frId: "FR2", subId: "SR 2.12",     slLevel: 3, desc: "Non-repudiation" },
+
+  { frId: "FR3", subId: "SR 3.1 RE 1", slLevel: 3, desc: "Cryptographic integrity protection" },
+  { frId: "FR3", subId: "SR 3.2 RE 2", slLevel: 3, desc: "Central management and reporting for malicious code protection" },
+  { frId: "FR3", subId: "SR 3.3 RE 1", slLevel: 3, desc: "Automated mechanisms for security functionality verification" },
+  { frId: "FR3", subId: "SR 3.4 RE 1", slLevel: 3, desc: "Automated notification about integrity violations" },
+  { frId: "FR3", subId: "SR 3.8 RE 1", slLevel: 3, desc: "Invalidation of session IDs after session termination" },
+  { frId: "FR3", subId: "SR 3.8 RE 2", slLevel: 3, desc: "Unique session ID generation" },
+
+  { frId: "FR4", subId: "SR 4.2 RE 1", slLevel: 3, desc: "Purging of shared memory resources" },
+
+  { frId: "FR5", subId: "SR 5.1 RE 2", slLevel: 3, desc: "Independence from non-control system networks" },
+  { frId: "FR5", subId: "SR 5.2 RE 2", slLevel: 3, desc: "Island mode" },
+  { frId: "FR5", subId: "SR 5.2 RE 3", slLevel: 3, desc: "Fail close" },
+  { frId: "FR5", subId: "SR 5.3 RE 1", slLevel: 3, desc: "Prohibit all general purpose person-to-person communications" },
+
+  { frId: "FR6", subId: "SR 6.1 RE 1", slLevel: 3, desc: "Programmatic access to audit logs" },
+
+  { frId: "FR7", subId: "SR 7.1 RE 2", slLevel: 3, desc: "Limit DoS effects to other systems or networks" },
+  { frId: "FR7", subId: "SR 7.3 RE 2", slLevel: 3, desc: "Backup automation" },
+  { frId: "FR7", subId: "SR 7.6 RE 1", slLevel: 3, desc: "Machine-readable reporting of current security settings" },
+
+  // --- SL 4 ---
+  { frId: "FR1", subId: "SR 1.1 RE 3", slLevel: 4, desc: "Multifactor authentication for all networks" },
+  { frId: "FR1", subId: "SR 1.7 RE 2", slLevel: 4, desc: "Password lifetime restrictions for all users" },
+
+  { frId: "FR2", subId: "SR 2.1 RE 4",  slLevel: 4, desc: "Dual approval" },
+  { frId: "FR2", subId: "SR 2.11 RE 2", slLevel: 4, desc: "Protection of time source integrity" },
+  { frId: "FR2", subId: "SR 2.12 RE 1", slLevel: 4, desc: "Non-repudiation for all users" },
+
+  { frId: "FR3", subId: "SR 3.3 RE 2",  slLevel: 4, desc: "Security functionality verification during normal operation" },
+  { frId: "FR3", subId: "SR 3.8 RE 3",  slLevel: 4, desc: "Randomness of session IDs" },
+  { frId: "FR3", subId: "SR 3.9 RE 1",  slLevel: 4, desc: "Audit records on write-once media" },
+
+  { frId: "FR4", subId: "SR 4.1 RE 2",  slLevel: 4, desc: "Protection of confidentiality across zone boundaries" },
+
+  { frId: "FR5", subId: "SR 5.1 RE 3",  slLevel: 4, desc: "Logical and physical isolation of critical networks" }
+];
+
+
+// We'll keep the Foundational Requirements for the chart:
+const foundationalRequirements = [
+  { id: "FR1", name: "Identification & Auth." },
+  { id: "FR2", name: "Use Control" },
+  { id: "FR3", name: "System Integrity" },
+  { id: "FR4", name: "Data Confidentiality" },
+  { id: "FR5", name: "Restricted Data Flow" },
+  { id: "FR6", name: "Timely Response to Events" },
+  { id: "FR7", name: "Resource Availability" }
+];
+
+// We'll store each zone's Chart.js instance here
+const zoneCharts = {};
+
+//-------------------------------------------------------------------
+// 2) PAGE LOAD
+//-------------------------------------------------------------------
+window.addEventListener("DOMContentLoaded", () => {
+  createSubRequirementRows();
+  loadZonesFromLocalStorage();
+
+  document.getElementById("addZoneBtn").addEventListener("click", onAddZone);
+
+  // Mass Select
+  document.getElementById("massSelectBtn").addEventListener("click", () => {
+    const slLevel = parseInt(document.getElementById("massSelectSL").value, 10);
+    const zoneChoice = document.getElementById("massSelectZone").value;
+    massSelectSR(slLevel, zoneChoice);
+  });
+
+  // Initialize the zone dropdown (with "All Zones" by default)
+  refreshZoneSelectDropdown();
+});
+
+//-------------------------------------------------------------------
+// 3) BUILD SUB-REQ ROWS
+//-------------------------------------------------------------------
+function createSubRequirementRows() {
+  const tbody = document.querySelector("#combinedZonesTable tbody");
+  tbody.innerHTML = "";
+
+  subRequirements.forEach(sr => {
+    const tr = document.createElement("tr");
+    tr.dataset.subReqId = sr.subId; 
+
+    tr.innerHTML = `
+      <td>${sr.frId}</td>
+      <td>${sr.subId}</td>
+      <td>SL${sr.slLevel}</td>
+      <td>${sr.desc}</td>
+      <!-- zone columns appended dynamically -->
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+//-------------------------------------------------------------------
+// 4) ZONE LOGIC
+//-------------------------------------------------------------------
+// Each zone is { zoneId, zoneName, targetSL, subReqStatus: { SR x.x: "Yes"/"No"/"N/A", ... } }
+
+function onAddZone() {
+  const nameInput = document.getElementById("newZoneName");
+  const slInput = document.getElementById("newZoneSL");
+
+  const zoneName = nameInput.value.trim();
+  const targetSL = parseInt(slInput.value, 10);
+
+  if (!zoneName) {
+    alert("Please enter a zone name.");
+    return;
+  }
+
+  const zoneId = "zone_" + Date.now();
+  // By default, mark all SR as "No"
+  const subReqStatus = {};
+  subRequirements.forEach(sr => {
+    subReqStatus[sr.subId] = "No";
+  });
+
+  const newZone = { zoneId, zoneName, targetSL, subReqStatus };
+  
+  // Save to local storage
+  const zones = getZonesFromMemory();
+  zones.push(newZone);
+  localStorage.setItem("zonesDataAdvanced", JSON.stringify(zones));
+
+  // Add the column + chart
+  addZoneColumn(newZone);
+
+  // Refresh zone dropdown
+  refreshZoneSelectDropdown();
+
+  // Clear form
+  nameInput.value = "";
+  slInput.value = "2";
+}
+
+function addZoneColumn(zone) {
+  // 1) Add <th>
+  const theadRow = document.querySelector("#combinedZonesTable thead tr");
+  const zoneTh = document.createElement("th");
+  zoneTh.innerHTML = `
+    <div class="zone-header">
+      <div class="zone-info">
+        <span class="zone-name">${zone.zoneName}</span>
+        <label class="zone-target-label">Target SL: 
+          <select class="zone-target-select" data-zoneid="${zone.zoneId}">
+            <option value="0" ${zone.targetSL === 0 ? "selected" : ""}>0</option>
+            <option value="1" ${zone.targetSL === 1 ? "selected" : ""}>1</option>
+            <option value="2" ${zone.targetSL === 2 ? "selected" : ""}>2</option>
+            <option value="3" ${zone.targetSL === 3 ? "selected" : ""}>3</option>
+            <option value="4" ${zone.targetSL === 4 ? "selected" : ""}>4</option>
+          </select>
+        </label>
+      </div>
+      <div class="zone-buttons">
+        <button class="edit-zone-col" data-zoneid="${zone.zoneId}">Edit</button>
+        <button class="remove-zone-col" data-zoneid="${zone.zoneId}">Remove</button>
+      </div>
+    </div>
+  `;
+
+  // Hook up the Target SL dropdown event:
+  const slSelect = zoneTh.querySelector(".zone-target-select");
+  slSelect.addEventListener("change", e => {
+    const newVal = parseInt(e.target.value, 10);
+    // Update the zone object in localStorage
+    let zones = getZonesFromMemory();
+    let z = zones.find(z => z.zoneId === zone.zoneId);
+    if (z) {
+      z.targetSL = newVal;
+      localStorage.setItem("zonesDataAdvanced", JSON.stringify(zones));
+      // Re-run chart
+      updateZoneChart(zone.zoneId);
+    }
+  });
+  theadRow.appendChild(zoneTh);
+
+  // 2) For each SR row, add a cell with tri-state radios (Yes/No/N/A)
+  const rows = document.querySelectorAll("#combinedZonesTable tbody tr");
+  rows.forEach(tr => {
+    const srId = tr.dataset.subReqId;
+    const currentVal = zone.subReqStatus[srId] || "No";
+
+    const td = document.createElement("td");
+    td.innerHTML = `
+      <label style="margin-right:5px;">
+        <input type="radio" 
+               name="radio_${zone.zoneId}_${srId}"
+               data-zoneid="${zone.zoneId}"
+               data-subreqid="${srId}"
+               value="Yes"
+               ${currentVal === "Yes" ? "checked" : ""} />
+        Yes
+      </label>
+      <label style="margin-right:5px;">
+        <input type="radio"
+               name="radio_${zone.zoneId}_${srId}"
+               data-zoneid="${zone.zoneId}"
+               data-subreqid="${srId}"
+               value="No"
+               ${currentVal === "No" ? "checked" : ""} />
+        No
+      </label>
+      <label>
+        <input type="radio"
+               name="radio_${zone.zoneId}_${srId}"
+               data-zoneid="${zone.zoneId}"
+               data-subreqid="${srId}"
+               value="N/A"
+               ${currentVal === "N/A" ? "checked" : ""} />
+        N/A
+      </label>
+    `;
+    tr.appendChild(td);
+  });
+
+  // 3) Edit / Remove buttons
+  zoneTh.querySelector(".edit-zone-col").addEventListener("click", () => editZoneDialog(zone.zoneId));
+  zoneTh.querySelector(".remove-zone-col").addEventListener("click", () => removeZoneColumn(zone.zoneId));
+
+  // 4) Attach "change" to the new radios
+  const allRadios = document.querySelectorAll(`input[data-zoneid="${zone.zoneId}"]`);
+  allRadios.forEach(r => {
+    r.addEventListener("change", () => {
+      saveZonesToLocalStorage();
+      updateZoneChart(zone.zoneId);
+    });
+  });
+
+  // 5) Create a chart container in #chartsWrapper
+  const chartsWrapper = document.getElementById("chartsWrapper");
+  const chartContainer = document.createElement("div");
+  chartContainer.classList.add("zone-chart-container");
+  chartContainer.id = `zoneChartContainer_${zone.zoneId}`;
+
+  // Create a header for the chart container
+  const header = document.createElement("div");
+  header.classList.add("chart-header");
+  header.textContent = `${zone.zoneName} (SL${zone.targetSL})`;
+  chartContainer.appendChild(header);
+
+  // Create the canvas
+  const canvas = document.createElement("canvas");
+  canvas.id = `zoneChart_${zone.zoneId}`;
+  chartContainer.appendChild(canvas);
+
+  chartsWrapper.appendChild(chartContainer);
+
+  // Initialize Chart.js as before...
+  const ctx = canvas.getContext("2d");
+  const radarChart = new Chart(ctx, {
+    type: "radar",
+    data: {
+      labels: foundationalRequirements.map(fr => fr.id),
+      datasets: [
+        {
+          label: "Achieved SL",
+          data: Array(foundationalRequirements.length).fill(0),
+          backgroundColor: "rgba(54, 162, 235, 0.2)",
+          borderColor: "rgba(54, 162, 235, 1)",
+          borderWidth: 2
+        },
+        {
+          label: "Target SL",
+          data: Array(foundationalRequirements.length).fill(zone.targetSL),
+          backgroundColor: "rgba(255, 99, 132, 0.2)",
+          borderColor: "rgba(255, 99, 132, 1)",
+          borderWidth: 2
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        r: {
+          min: 0,
+          max: 4,
+          ticks: { stepSize: 1 }
+        }
+      }
+    }
+  });
+  zoneCharts[zone.zoneId] = radarChart;
+  updateZoneChart(zone.zoneId);
+
+}
+
+//-------------------------------------------------------------------
+// 5) MASS SELECT: Mark up to SL => "Yes"
+//-------------------------------------------------------------------
+function massSelectSR(level, zoneChoice) {
+  const zones = getZonesFromMemory();
+  let relevantZones = [];
+
+  if (zoneChoice === "all") {
+    relevantZones = zones;
+  } else {
+    relevantZones = zones.filter(z => z.zoneId === zoneChoice);
+  }
+
+  // 1) Update data model in local storage
+  relevantZones.forEach(zone => {
+    subRequirements.forEach(sr => {
+      if (sr.slLevel <= level) {
+        // If sub-req is at or below the chosen level => "Yes"
+        zone.subReqStatus[sr.subId] = "Yes";
+      } else {
+        // If sub-req is above the chosen level => "No"
+        zone.subReqStatus[sr.subId] = "No";
+      }
+    });
+  });
+
+  localStorage.setItem("zonesDataAdvanced", JSON.stringify(zones));
+
+  // 2) Update the UI (radio buttons) and re-run chart
+  relevantZones.forEach(zone => {
+    subRequirements.forEach(sr => {
+      const radios = document.querySelectorAll(
+        `input[data-zoneid="${zone.zoneId}"][data-subreqid="${sr.subId}"]`
+      );
+
+      // If SR level <= chosen, set to "Yes"; else "No"
+      if (sr.slLevel <= level) {
+        radios.forEach(r => { 
+          if (r.value === "Yes") r.checked = true; 
+        });
+      } else {
+        radios.forEach(r => { 
+          if (r.value === "No") r.checked = true; 
+        });
+      }
+    });
+    updateZoneChart(zone.zoneId);
+  });
+}
+
+
+//-------------------------------------------------------------------
+// 6) SAVE / LOAD ZONES
+//-------------------------------------------------------------------
+function loadZonesFromLocalStorage() {
+  const stored = localStorage.getItem("zonesDataAdvanced");
+  if (!stored) return;
+
+  let zones;
+  try {
+    zones = JSON.parse(stored);
+  } catch(e) {
+    console.error("Could not parse zonesDataAdvanced:", e);
+    return;
+  }
+
+  zones.forEach(z => addZoneColumn(z));
+  // Refresh zone dropdown
+  refreshZoneSelectDropdown();
+}
+
+function saveZonesToLocalStorage() {
+  const zones = getZonesFromMemory();
+
+  zones.forEach(zone => {
+    subRequirements.forEach(sr => {
+      const radios = document.querySelectorAll(
+        `input[data-zoneid="${zone.zoneId}"][data-subreqid="${sr.subId}"]`
+      );
+      const checkedRadio = [...radios].find(r => r.checked);
+      if (checkedRadio) {
+        zone.subReqStatus[sr.subId] = checkedRadio.value; // "Yes","No","N/A"
+      }
+    });
+  });
+
+  localStorage.setItem("zonesDataAdvanced", JSON.stringify(zones));
+}
+
+function getZonesFromMemory() {
+  const raw = localStorage.getItem("zonesDataAdvanced");
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+//-------------------------------------------------------------------
+// 7) UPDATE CHART
+//-------------------------------------------------------------------
+function updateZoneChart(zoneId) {
+  const zones = getZonesFromMemory();
+  const zone = zones.find(z => z.zoneId === zoneId);
+  if (!zone) return;
+
+  // We'll allow the Achieved SL to go up to 4, down to 0
+  const frAchievedLevels = {};
+
+  foundationalRequirements.forEach(frObj => {
+    let bestAchieved = 0;  // default is 0 if not even SL1 is satisfied
+
+    for (let level = 4; level >= 0; level--) {
+      const relevantSRs = subRequirements.filter(sr =>
+        sr.frId === frObj.id && sr.slLevel <= level
+      );
+
+      // "allOK" => True if all sub-req up to 'level' are "Yes" or "N/A."
+      const allOK = relevantSRs.every(sr => {
+        const radios = document.querySelectorAll(
+          `input[data-zoneid="${zone.zoneId}"][data-subreqid="${sr.subId}"]`
+        );
+        const checkedRadio = [...radios].find(r => r.checked);
+        const val = checkedRadio ? checkedRadio.value : "No";
+        return (val === "Yes" || val === "N/A");
+      });
+
+      if (allOK) {
+        bestAchieved = level;
+        break;
+      }
+    }
+    frAchievedLevels[frObj.id] = bestAchieved;
+  });
+
+  // Convert to arrays for Chart.js
+  const achievedData = foundationalRequirements.map(fr => frAchievedLevels[fr.id]);
+  const targetData = Array(foundationalRequirements.length).fill(zone.targetSL); 
+    // zone.targetSL might be 1..4, or 0..4 if you allow zero
+
+  // Update chart
+  const chart = zoneCharts[zone.zoneId];
+  if (!chart) return;
+
+  chart.data.datasets[0].data = achievedData; 
+  chart.data.datasets[1].data = targetData;
+  chart.update();
+
+  refreshChartTitle(zone); 
+}
+
+function refreshChartTitle(zone) {
+  // zone is the updated zone object
+  const container = document.getElementById(`zoneChartContainer_${zone.zoneId}`);
+  if (container) {
+    const h3 = container.querySelector(".chart-header");
+    if (h3) {
+      h3.textContent = `${zone.zoneName} (SL${zone.targetSL})`;
+    }
+  }
+}
+
+//-------------------------------------------------------------------
+// 8) REMOVE or EDIT a ZONE
+//-------------------------------------------------------------------
+function removeZoneColumn(zoneId) {
+  if (!confirm("Remove this zone/column?")) return;
+
+  // Remove <th>
+  const theadRow = document.querySelector("#combinedZonesTable thead tr");
+  const zoneTh = [...theadRow.children].find(th =>
+    th.querySelector(`button[data-zoneid="${zoneId}"]`)
+  );
+  if (zoneTh) zoneTh.remove();
+
+  // Remove TD in each row
+  const bodyRows = document.querySelectorAll("#combinedZonesTable tbody tr");
+  bodyRows.forEach(tr => {
+    const tds = [...tr.children];
+    const colToRemove = tds.find(td =>
+      td.querySelector(`input[data-zoneid="${zoneId}"]`)
+    );
+    if (colToRemove) colToRemove.remove();
+  });
+
+  // Remove from local storage
+  let zones = getZonesFromMemory();
+  zones = zones.filter(z => z.zoneId !== zoneId);
+  localStorage.setItem("zonesDataAdvanced", JSON.stringify(zones));
+
+  // Destroy chart
+  if (zoneCharts[zoneId]) {
+    zoneCharts[zoneId].destroy();
+    delete zoneCharts[zoneId];
+  }
+  // Remove chart container
+  const canvasElem = document.getElementById(`zoneChart_${zoneId}`);
+  if (canvasElem && canvasElem.parentElement) {
+    canvasElem.parentElement.remove();
+  }
+
+  refreshZoneSelectDropdown();
+  refreshChartTitle(zone);
+}
+
+function editZoneDialog(zoneId) {
+  const zones = getZonesFromMemory();
+  const zone = zones.find(z => z.zoneId === zoneId);
+  if (!zone) return;
+
+  const newName = prompt("Edit Zone Name:", zone.zoneName) || zone.zoneName;
+  let newSL = parseInt(prompt("Edit Target SL (0-4):", zone.targetSL), 10);
+  if (!(newSL >= 1 && newSL <= 4)) newSL = zone.targetSL;
+
+  zone.zoneName = newName;
+  zone.targetSL = newSL;
+
+  localStorage.setItem("zonesDataAdvanced", JSON.stringify(zones));
+  reRenderZoneColumnHeader(zoneId, newName, newSL);
+  updateZoneChart(zoneId);
+  refreshChartTitle(zone);
+}
+
+function reRenderZoneColumnHeader(zoneId, newName, newSL) {
+  const theadRow = document.querySelector("#combinedZonesTable thead tr");
+  const zoneTh = [...theadRow.children].find(th =>
+    th.querySelector(`button[data-zoneid="${zoneId}"]`)
+  );
+
+  // we also re-fetch the zone from localStorage, if needed
+  const zones = getZonesFromMemory();
+  const zone = zones.find(z => z.zoneId === zoneId); 
+  if (!zone) return;
+
+  if (zoneTh) {
+    zoneTh.innerHTML = `
+      <div>${newName}</div>
+      <button class="edit-zone-col" data-zoneid="${zone.zoneId}">Edit</button>
+      <label>Target SL: 
+        <select class="zone-target-select" data-zoneid="${zone.zoneId}">
+          <option value="0" ${newSL === 0 ? "selected" : ""}>0</option>
+          <option value="1" ${newSL === 1 ? "selected" : ""}>1</option>
+          <option value="2" ${newSL === 2 ? "selected" : ""}>2</option>
+          <option value="3" ${newSL === 3 ? "selected" : ""}>3</option>
+          <option value="4" ${newSL === 4 ? "selected" : ""}>4</option>
+        </select>
+      </label>
+      <br>
+      <button class="remove-zone-col" data-zoneid="${zone.zoneId}">Remove</button>
+    `;
+    // ...
+    // attach event listeners
+  }
+  
+  // We also re-run refreshChartTitle
+  refreshChartTitle(zone); // so the chart's <h3> updates
+  refreshZoneSelectDropdown();
+}
+
+//-------------------------------------------------------------------
+// 9) REFRESH ZONE SELECT DROPDOWN (for Mass Select usage)
+//-------------------------------------------------------------------
+function refreshZoneSelectDropdown() {
+  const zoneSelect = document.getElementById("massSelectZone");
+  if (!zoneSelect) return;
+  zoneSelect.innerHTML = '<option value="all">All Zones</option>';
+
+  const zones = getZonesFromMemory();
+  zones.forEach(z => {
+    const opt = document.createElement("option");
+    opt.value = z.zoneId;
+    opt.textContent = z.zoneName;
+    zoneSelect.appendChild(opt);
+  });
+}
+
+//-------------------------------------------------------------------
+// 10) EXPORT FUNCTION TO EXPORT TO EXCEL FILE
+//-------------------------------------------------------------------
+document.getElementById("exportExcelBtn").addEventListener("click", () => {
+  const zones = getZonesFromMemory(); // All zones from localStorage
+  // Build header row: First two columns for sub-req details, then one per zone.
+  const header = ["Sub-Requirement", "Description"];
+  zones.forEach(zone => {
+    header.push(`${zone.zoneName} (Target: SL${zone.targetSL})`);
+  });
+
+  // Build data rows: one row per subRequirement.
+  const data = [header];
+  subRequirements.forEach(sr => {
+    const row = [sr.subId, sr.desc];
+    zones.forEach(zone => {
+      // For each zone, get the status for this sub-requirement.
+      const status = zone.subReqStatus[sr.subId] || "No";
+      row.push(status);
+    });
+    data.push(row);
+  });
+
+  // Create a new workbook and worksheet from the array-of-arrays.
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, "Assessment");
+
+  // Trigger the file download.
+  XLSX.writeFile(wb, "assessment.xlsx");
+});
+
+//-------------------------------------------------------------------
+// 11) IMPORT FUNCTION TO IMPORT EXCEL FILE INTO THE ZONE AND FILL IN THE TABLE
+//-------------------------------------------------------------------
+document.getElementById("importExcelBtn").addEventListener("click", () => {
+  const fileInput = document.getElementById("importExcel");
+  const file = fileInput.files[0];
+  if (!file) {
+    alert("Please choose an Excel file to import.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const data = new Uint8Array(e.target.result);
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    
+    // Convert worksheet to array-of-arrays
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    if (rows.length < 2) {
+      alert("The imported file does not have enough data.");
+      return;
+    }
+    
+    // The first row is the header
+    const headerRow = rows[0];
+    // Expect first two columns to be "Sub-Requirement" and "Description"
+    // From the third column onward, each column represents a zone.
+    
+    const importedZones = [];
+    
+    // Process zone headers from column index 2 onward
+    for (let c = 2; c < headerRow.length; c++) {
+      const headerCell = headerRow[c];
+      // Expected format: "ZoneName (Target: SLX)" e.g., "Production Zone (Target: SL2)"
+      const match = headerCell.match(/^(.*?)\s*\(Target:\s*SL(\d)\)/i);
+      if (match) {
+        const zoneName = match[1].trim();
+        const targetSL = parseInt(match[2], 10);
+        importedZones.push({
+          zoneId: "zone_" + Date.now() + "_" + c, // generate a unique ID
+          zoneName: zoneName,
+          targetSL: targetSL,
+          subReqStatus: {}  // to be filled in below
+        });
+      }
+    }
+    
+    // Process the rest of the rows (each sub-requirement)
+    // Assuming each row: Column A = subId, Column B = Description, then zone statuses.
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      const subId = row[0]; // e.g., "SR 1.1"
+      // For each zone column, starting from index 2
+      for (let z = 0; z < importedZones.length; z++) {
+        const colIndex = z + 2;
+        // Default to "No" if cell is empty
+        const status = row[colIndex] ? row[colIndex].toString().trim() : "No";
+        importedZones[z].subReqStatus[subId] = status;
+      }
+    }
+    
+    // Save imported zones to local storage
+    localStorage.setItem("zonesDataAdvanced", JSON.stringify(importedZones));
+    alert("Zones imported successfully. Reloading the page...");
+    // Optionally, clear your UI and reload
+    location.reload();
+  };
+  reader.readAsArrayBuffer(file);
+});
+</script>
+
+</body>
+</html>
